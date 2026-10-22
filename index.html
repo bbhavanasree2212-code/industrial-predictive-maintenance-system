@@ -1,0 +1,1345 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Industrial Equipment Monitoring Dashboard</title>
+  <style>
+    :root {
+      --bg: #f1f5f9;
+      --panel: #ffffff;
+      --ink: #172033;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --blue: #2457d6;
+      --green: #166534;
+      --amber: #92400e;
+      --red: #991b1b;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    header {
+      background: linear-gradient(120deg, #12213c, #2457d6);
+      color: white;
+      padding: 28px 5%;
+    }
+
+    header h1 { margin: 0 0 10px; }
+    header p { margin: 0; color: #dbeafe; }
+
+    main {
+      max-width: 1250px;
+      margin: 25px auto;
+      padding: 0 18px 40px;
+    }
+
+    .filters, .metrics, .layout {
+      display: grid;
+      gap: 15px;
+    }
+
+    .filters {
+      grid-template-columns: repeat(2, minmax(180px, 240px));
+      margin-bottom: 20px;
+    }
+
+    select {
+      padding: 11px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: white;
+      color: var(--ink);
+    }
+
+    .metrics {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background: var(--panel);
+      padding: 18px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      box-shadow: 0 4px 15px #17203308;
+      min-width: 0;
+    }
+
+    .metric-label { color: var(--muted); font-size: 14px; }
+    .metric-value { font-size: 28px; font-weight: bold; margin-top: 10px; }
+    .muted { color: var(--muted); font-size: 12px; }
+
+    .layout {
+      grid-template-columns: 1fr 1fr;
+      align-items: start;
+    }
+
+    h2 { font-size: 18px; margin: 0 0 12px; }
+
+    .intro {
+      color: var(--muted);
+      font-size: 13px;
+      margin: 0 0 14px;
+    }
+
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 11px 8px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 5px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+
+    .Operational, .Low {
+      background: #dcfce7;
+      color: var(--green);
+    }
+
+    .Maintenance, .High {
+      background: #fef3c7;
+      color: var(--amber);
+    }
+
+    .Offline, .Critical {
+      background: #fee2e2;
+      color: var(--red);
+    }
+
+    .Medium {
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+
+    .alert {
+      padding: 12px;
+      border-left: 4px solid #d97706;
+      background: #fffbeb;
+      margin-bottom: 10px;
+      border-radius: 5px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .alert.Critical {
+      border-color: #dc2626;
+      background: #fef2f2;
+    }
+
+    .alert.Low {
+      border-color: #16a34a;
+      background: #f0fdf4;
+    }
+
+    .alert strong { display: block; margin-bottom: 4px; }
+    footer { color: var(--muted); font-size: 12px; margin-top: 20px; }
+
+    @media (max-width: 850px) {
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 450px) {
+      .metrics { gap: 8px; }
+      .card { padding: 12px; }
+      .metric-value { font-size: 22px; }
+    }
+  </style>
+</head>
+
+<body>
+<header>
+  <h1>Industrial Equipment Monitoring Dashboard</h1>
+  <p>Predictive maintenance alerts, machine health and downtime analytics</p>
+</header>
+
+<main>
+  <div class="filters">
+    <select id="statusFilter" aria-label="Filter by machine status">
+      <option value="All">All statuses</option>
+      <option value="Operational">Operational</option>
+      <option value="Maintenance">Maintenance</option>
+      <option value="Offline">Offline</option>
+    </select>
+
+    <select id="unitFilter" aria-label="Filter by production unit">
+      <option value="All">All units</option>
+      <option value="Assembly Line A">Assembly Line A</option>
+      <option value="Packaging">Packaging</option>
+      <option value="Utilities">Utilities</option>
+      <option value="Machining">Machining</option>
+    </select>
+  </div>
+
+  <section class="metrics">
+    <div class="card">
+      <div class="metric-label">Total machines</div>
+      <div class="metric-value" id="total">0</div>
+    </div>
+    <div class="card">
+      <div class="metric-label">Operational machines</div>
+      <div class="metric-value" id="operational">0</div>
+    </div>
+    <div class="card">
+      <div class="metric-label">Recent downtime</div>
+      <div class="metric-value" id="downtime">0 h</div>
+    </div>
+    <div class="card">
+      <div class="metric-label">Highest maintenance risk</div>
+      <div class="metric-value" id="highestRisk">0</div>
+      <div class="muted" id="riskMachine"></div>
+    </div>
+  </section>
+
+  <section class="layout">
+    <div class="card">
+      <h2>Equipment status</h2>
+      <p class="intro">
+        Temperature warning above 80°C; vibration warning above 7.0 mm/s.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Machine / unit</th>
+              <th>Run hours</th>
+              <th>Temp.</th>
+              <th>Vibration</th>
+              <th>Status</th>
+              <th>Risk</th>
+            </tr>
+          </thead>
+          <tbody id="equipmentRows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Predictive alerts</h2>
+      <p class="intro">Sensor thresholds, status and maintenance dates.</p>
+      <div id="alerts"></div>
+    </div>
+
+    <div class="card">
+      <h2>Maintenance priority</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Machine</th>
+              <th>Severity</th>
+              <th>Due date</th>
+              <th>Recommended action</th>
+            </tr>
+          </thead>
+          <tbody id="priorityRows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Downtime analytics</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Machine</th>
+              <th>Unit</th>
+              <th>Downtime</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="downtimeRows"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Demonstration dashboard using sample equipment data and rule-based risk scoring.
+    It is not connected to live industrial sensors.
+  </footer>
+</main>
+
+<script>
+const machines = [
+  {
+    id: "M-101", unit: "Assembly Line A", hours: 6240,
+    temp: 72.4, vibration: 3.2, status: "Operational",
+    due: "2026-11-02", downtime: 1.5
+  },
+  {
+    id: "M-102", unit: "Assembly Line A", hours: 8910,
+    temp: 86.7, vibration: 8.4, status: "Maintenance",
+    due: "2026-10-23", downtime: 8
+  },
+  {
+    id: "M-203", unit: "Packaging", hours: 5120,
+    temp: 68.9, vibration: 2.6, status: "Operational",
+    due: "2026-11-18", downtime: 0.5
+  },
+  {
+    id: "M-204", unit: "Packaging", hours: 10220,
+    temp: 83.1, vibration: 6.2, status: "Operational",
+    due: "2026-10-25", downtime: 5.5
+  },
+  {
+    id: "M-305", unit: "Utilities", hours: 11380,
+    temp: 78.5, vibration: 9.1, status: "Offline",
+    due: "2026-10-22", downtime: 16
+  },
+  {
+    id: "M-306", unit: "Utilities", hours: 4360,
+    temp: 61.2, vibration: 2.1, status: "Operational",
+    due: "2026-12-04", downtime: 0
+  },
+  {
+    id: "M-407", unit: "Machining", hours: 7680,
+    temp: 80.8, vibration: 7.6, status: "Maintenance",
+    due: "2026-10-24", downtime: 6
+  }
+];
+
+const TEMP_LIMIT = 80;
+const VIBRATION_LIMIT = 7.0;
+const $ = id => document.getElementById(id);
+
+function daysUntil(date) {
+  const target = new Date(date + "T00:00:00");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((target - today) / 86400000);
+}
+
+function formatDate(date) {
+  return new Date(date + "T00:00:00").toLocaleDateString(undefined, {
+    year: "numeric", month: "short", day: "numeric"
+  });
+}
+
+function assess(machine) {
+  let score = 0;
+  const days = daysUntil(machine.due);
+
+  if (machine.temp > TEMP_LIMIT) {
+    score += Math.min(30, 15 + (machine.temp - TEMP_LIMIT) * 1.5);
+  }
+
+  if (machine.vibration > VIBRATION_LIMIT) {
+    score += Math.min(30, 15 + (machine.vibration - VIBRATION_LIMIT) * 5);
+  }
+
+  if (machine.status === "Maintenance") score += 15;
+  if (machine.status === "Offline") score += 25;
+  if (days <= 3) score += 15;
+  else if (days <= 14) score += 8;
+
+  score = Math.min(100, Math.round(score));
+
+  const severity =
+    score >= 65 ? "Critical" :
+    score >= 40 ? "High" :
+    score >= 20 ? "Medium" : "Low";
+
+  let action = "Continue routine monitoring";
+
+  if (machine.status === "Offline") {
+    action = "Keep isolated; inspect before restarting";
+  } else if (machine.temp > TEMP_LIMIT && machine.vibration > VIBRATION_LIMIT) {
+    action = "Inspect bearings and cooling immediately";
+  } else if (machine.temp > TEMP_LIMIT) {
+    action = "Inspect cooling, lubrication and thermal load";
+  } else if (machine.vibration > VIBRATION_LIMIT) {
+    action = "Inspect alignment, bearings and mounting";
+  } else if (machine.status === "Maintenance" || days <= 3) {
+    action = "Complete planned maintenance and verify sensors";
+  }
+
+  return { ...machine, score, severity, action };
+}
+
+function badge(value) {
+  return `<span class="pill ${value}">${value}</span>`;
+}
+
+function render() {
+  const selectedStatus = $("statusFilter").value;
+  const selectedUnit = $("unitFilter").value;
+
+  const list = machines
+    .filter(machine =>
+      (selectedStatus === "All" || machine.status === selectedStatus) &&
+      (selectedUnit === "All" || machine.unit === selectedUnit)
+    )
+    .map(assess)
+    .sort((a, b) => b.score - a.score);
+
+  $("total").textContent = list.length;
+  $("operational").textContent =
+    list.filter(machine => machine.status === "Operational").length;
+
+  $("downtime").textContent =
+    list.reduce((sum, machine) => sum + machine.downtime, 0).toFixed(1) + " h";
+
+  $("highestRisk").textContent = list.length ? list[0].score + "/100" : "—";
+  $("riskMachine").textContent = list.length
+    ? list[0].id + " · " + list[0].severity
+    : "No matching machines";
+
+  $("equipmentRows").innerHTML = list.map(machine => `
+    <tr>
+      <td><strong>${machine.id}</strong><br>
+        <span class="muted">${machine.unit}</span></td>
+      <td>${machine.hours.toLocaleString()} h</td>
+      <td>${machine.temp.toFixed(1)}°C ${machine.temp > TEMP_LIMIT ? "⚠" : ""}</td>
+      <td>${machine.vibration.toFixed(1)} mm/s ${machine.vibration > VIBRATION_LIMIT ? "⚠" : ""}</td>
+      <td>${badge(machine.status)}</td>
+      <td>${machine.score}/100</td>
+    </tr>
+  `).join("") || `<tr><td colspan="6">No matching machines.</td></tr>`;
+
+  const alertMachines = list.filter(machine =>
+    machine.temp > TEMP_LIMIT ||
+    machine.vibration > VIBRATION_LIMIT ||
+    machine.status !== "Operational" ||
+    daysUntil(machine.due) <= 3
+  ).slice(0, 5);
+
+  $("alerts").innerHTML = alertMachines.map(machine => {
+    const reasons = [];
+
+    if (machine.temp > TEMP_LIMIT) {
+      reasons.push(`temperature ${machine.temp.toFixed(1)}°C exceeds ${TEMP_LIMIT}°C`);
+    }
+    if (machine.vibration > VIBRATION_LIMIT) {
+      reasons.push(`vibration ${machine.vibration.toFixed(1)} mm/s exceeds ${VIBRATION_LIMIT} mm/s`);
+    }
+    if (machine.status !== "Operational") {
+      reasons.push(`status is ${machine.status}`);
+    }
+    if (daysUntil(machine.due) <= 3) {
+      reasons.push(`maintenance due ${formatDate(machine.due)}`);
+    }
+
+    return `
+      <div class="alert ${machine.severity}">
+        <strong>${machine.id} · ${machine.severity} risk</strong>
+        ${reasons.join("; ")}.
+        <br><small>${machine.action}.</small>
+      </div>
+    `;
+  }).join("") || `<div class="alert Low">No active alerts for this selection.</div>`;
+
+  $("priorityRows").innerHTML = list.slice(0, 5).map(machine => `
+    <tr>
+      <td><strong>${machine.id}</strong></td>
+      <td>${badge(machine.severity)}</td>
+      <td>${formatDate(machine.due)}</td>
+      <td>${machine.action}</td>
+    </tr>
+  `).join("") || `<tr><td colspan="4">No matching machines.</td></tr>`;
+
+  $("downtimeRows").innerHTML = [...list]
+    .sort((a, b) => b.downtime - a.downtime)
+    .map(machine => `
+      <tr>
+        <td>${machine.id}</td>
+        <td>${machine.unit}</td>
+        <td>${machine.downtime.toFixed(1)} h</td>
+        <td>${badge(machine.status)}</td>
+      </tr>
+    `).join("") || `<tr><td colspan="4">No matching machines.</td></tr>`;
+}
+
+$("statusFilter").addEventListener("change", render);
+$("unitFilter").addEventListener("change", render);
+render();
+</script>
+</body>
+</html>
+'''
+
+files["Dockerfile"] = r'''FROM nginx:1.27-alpine
+
+LABEL org.opencontainers.image.title="Industrial Predictive Maintenance Dashboard"
+LABEL org.opencontainers.image.description="Equipment health, alerts and downtime analytics"
+
+# The build argument lets Jenkins create a modified version for rollback testing.
+ARG HTML_FILE=index.html
+COPY ${HTML_FILE} /usr/share/nginx/html/index.html
+
+EXPOSE 80
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1/ || exit 1
+'''
+
+files["deployment.yaml"] = r'''apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: industrial-maintenance-dashboard
+  labels:
+    app: industrial-maintenance-dashboard
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: industrial-maintenance-dashboard
+  template:
+    metadata:
+      labels:
+        app: industrial-maintenance-dashboard
+    spec:
+      containers:
+        - name: dashboard
+          image: YOUR_DOCKERHUB_USERNAME/industrial-maintenance-dashboard:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 80
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "250m"
+              memory: "128Mi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: industrial-maintenance-dashboard
+spec:
+  type: NodePort
+  selector:
+    app: industrial-maintenance-dashboard
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      nodePort: 30089
+'''
+
+files["Jenkinsfile"] = r'''pipeline {
+  agent any
+
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+    timeout(time: 30, unit: 'MINUTES')
+  }
+
+  parameters {
+    choice(
+      name: 'RELEASE_MODE',
+      choices: ['STABLE', 'FAULTY_ROLLBACK_TEST'],
+      description: 'STABLE deploys normally. FAULTY_ROLLBACK_TEST verifies rollback after a failed readiness probe.'
+    )
+    booleanParam(
+      name: 'DEPLOY_TO_KUBERNETES',
+      defaultValue: true,
+      description: 'Deploy to the configured Kubernetes cluster.'
+    )
+  }
+
+  environment {
+    DOCKERHUB_USERNAME = 'YOUR_DOCKERHUB_USERNAME'
+    IMAGE_REPO = 'YOUR_DOCKERHUB_USERNAME/industrial-maintenance-dashboard'
+    SMOKE_PORT = '18089'
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+        sh 'git log -1 --oneline'
+      }
+    }
+
+    stage('Validate source') {
+      parallel {
+        stage('Validate dashboard') {
+          steps {
+            sh '''
+              set -eu
+              test -s index.html
+              grep -q "Equipment Monitoring Dashboard" index.html
+              grep -q "Predictive alerts" index.html
+              grep -qi "downtime" index.html
+              echo "Dashboard validation passed"
+            '''
+          }
+        }
+        stage('Validate Kubernetes manifest') {
+          steps {
+            sh '''
+              set -eu
+              test -s deployment.yaml
+              grep -q "kind: Deployment" deployment.yaml
+              grep -q "kind: Service" deployment.yaml
+              grep -q "readinessProbe" deployment.yaml
+              echo "Kubernetes manifest validation passed"
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Build Docker image') {
+      steps {
+        sh '''
+          set -eu
+          docker build --pull -t "$IMAGE_REPO:$BUILD_NUMBER" -t "$IMAGE_REPO:latest" .
+        '''
+      }
+    }
+
+    stage('Local HTTP smoke test') {
+      steps {
+        sh '''
+          set -eu
+          cleanup() { docker rm -f maintenance-smoke >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker rm -f maintenance-smoke >/dev/null 2>&1 || true
+          docker run -d --name maintenance-smoke -p "$SMOKE_PORT:80" "$IMAGE_REPO:$BUILD_NUMBER"
+
+          ok=0
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent "http://127.0.0.1:$SMOKE_PORT/" | grep -q "Equipment Monitoring Dashboard"; then
+              ok=1
+              break
+            fi
+            sleep 2
+          done
+
+          test "$ok" -eq 1
+          echo "Local HTTP smoke test passed"
+        '''
+      }
+    }
+
+    stage('Archive artifacts') {
+      steps {
+        archiveArtifacts artifacts: 'index.html,Dockerfile,Jenkinsfile,deployment.yaml', fingerprint: true
+      }
+    }
+
+    stage('Push image to Docker Hub') {
+      steps {
+        withCredentials([
+          usernamePassword(
+            credentialsId: 'dockerhub-creds',
+            usernameVariable: 'DH_USER',
+            passwordVariable: 'DH_TOKEN'
+          )
+        ]) {
+          sh '''
+            set +x
+            echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin
+            docker push "$IMAGE_REPO:$BUILD_NUMBER"
+            docker push "$IMAGE_REPO:latest"
+            docker logout
+          '''
+        }
+      }
+    }
+
+    stage('Deploy stable release') {
+      when {
+        expression { return params.DEPLOY_TO_KUBERNETES }
+      }
+      steps {
+        withCredentials([
+          file(credentialsId: 'kubernetes-creds', variable: 'KUBECONFIG_FILE')
+        ]) {
+          sh '''
+            set -eu
+            export KUBECONFIG="$KUBECONFIG_FILE"
+
+            sed "s|YOUR_DOCKERHUB_USERNAME|$DOCKERHUB_USERNAME|g" deployment.yaml > deployment.rendered.yaml
+            kubectl apply -f deployment.rendered.yaml
+            kubectl set image deployment/industrial-maintenance-dashboard dashboard="$IMAGE_REPO:$BUILD_NUMBER"
+            kubectl rollout status deployment/industrial-maintenance-dashboard --timeout=180s
+            kubectl get deployment industrial-maintenance-dashboard
+            kubectl get pods -l app=industrial-maintenance-dashboard
+            kubectl get service industrial-maintenance-dashboard
+          '''
+        }
+      }
+    }
+
+    stage('Fault injection and automatic rollback') {
+      when {
+        allOf {
+          expression { return params.RELEASE_MODE == 'FAULTY_ROLLBACK_TEST' }
+          expression { return params.DEPLOY_TO_KUBERNETES }
+        }
+      }
+      steps {
+        withCredentials([
+          file(credentialsId: 'kubernetes-creds', variable: 'KUBECONFIG_FILE')
+        ]) {
+          sh '''
+            set -eu
+            export KUBECONFIG="$KUBECONFIG_FILE"
+            sed 's/Equipment Monitoring Dashboard/FAULTY RELEASE - SHOULD ROLLBACK/' index.html > faulty-index.html
+            docker build --build-arg HTML_FILE=faulty-index.html -t "$IMAGE_REPO:faulty-$BUILD_NUMBER" .
+          '''
+
+          withCredentials([
+            usernamePassword(
+              credentialsId: 'dockerhub-creds',
+              usernameVariable: 'DH_USER',
+              passwordVariable: 'DH_TOKEN'
+            )
+          ]) {
+            sh '''
+              set +x
+              echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin
+              docker push "$IMAGE_REPO:faulty-$BUILD_NUMBER"
+              docker logout
+            '''
+          }
+
+          sh '''
+            set -eu
+            export KUBECONFIG="$KUBECONFIG_FILE"
+
+            echo "Injecting a bad readiness probe to simulate a failed release"
+            kubectl patch deployment industrial-maintenance-dashboard --type='json' \
+              -p='[{"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe/httpGet/path","value":"/intentionally-missing-health-check"}]'
+            kubectl set image deployment/industrial-maintenance-dashboard dashboard="$IMAGE_REPO:faulty-$BUILD_NUMBER"
+
+            if kubectl rollout status deployment/industrial-maintenance-dashboard --timeout=45s; then
+              echo "ERROR: faulty rollout unexpectedly succeeded."
+              exit 1
+            else
+              echo "Expected failed rollout detected."
+            fi
+
+            kubectl describe deployment industrial-maintenance-dashboard || true
+            kubectl get pods -l app=industrial-maintenance-dashboard || true
+
+            kubectl rollout undo deployment/industrial-maintenance-dashboard
+            kubectl rollout status deployment/industrial-maintenance-dashboard --timeout=180s
+
+            echo "Testing the restored service over HTTP"
+            kubectl port-forward service/industrial-maintenance-dashboard 18090:80 >/tmp/maintenance-port-forward.log 2>&1 &
+            PF_PID=$!
+            trap 'kill "$PF_PID" >/dev/null 2>&1 || true' EXIT
+
+            ok=0
+            for attempt in $(seq 1 25); do
+              if curl --fail --silent http://127.0.0.1:18090/ | grep -q "Equipment Monitoring Dashboard"; then
+                ok=1
+                break
+              fi
+              sleep 2
+            done
+
+            test "$ok" -eq 1
+            kubectl get deployment industrial-maintenance-dashboard
+            kubectl get pods -l app=industrial-maintenance-dashboard
+            echo "Rollback succeeded and the restored dashboard responds to HTTP."
+          '''
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      sh 'docker rm -f maintenance-smoke >/dev/null 2>&1 || true'
+      archiveArtifacts artifacts: 'faulty-index.html,deployment.rendered.yaml', allowEmptyArchive: true
+    }
+    success {
+      echo 'Pipeline completed successfully.'
+    }
+    failure {
+      echo 'Pipeline failed. Review the stage logs and Kubernetes diagnostics.'
+    }
+  }
+}
+'''
+
+for name, content in files.items():
+    with open(os.path.join(project_dir, name), "w", encoding="utf-8") as f:
+        f.write(content)
+
+zip_path = "/mnt/data/industrial-predictive-maintenance-system.zip"
+with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+    for name in files:
+        zf.write(os.path.join(project_dir, name), arcname=f"industrial-predictive-maintenance-system/{name}")
+
+print("Created the following files:")
+for name, content in files.items():
+    print(f"- {name}: {len(content.splitlines())} lines")
+print(f"\nDownload archive: {zip_path}")
+print(f"Archive size: {os.path.getsize(zip_path)} bytes")
+(coder)
+Below is the **complete code for all four files** for your `industrial-predictive-maintenance-system` GitHub repository.
+
+Create these files with the exact names:
+
+- `index.html`
+- `Dockerfile`
+- `Jenkinsfile`
+- `deployment.yaml`
+
+## 1. `index.html`
+
+This provides the equipment dashboard, seven sample machines, status filters, predictive maintenance alerts, risk scores, and downtime analytics.
+
+<CodeBlock language="html" editable>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Industrial Equipment Monitoring Dashboard</title>
+  <style>
+    :root {
+      --bg: #f1f5f9;
+      --panel: #ffffff;
+      --ink: #172033;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --blue: #2457d6;
+      --green: #166534;
+      --amber: #92400e;
+      --red: #991b1b;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    header {
+      background: linear-gradient(120deg, #12213c, #2457d6);
+      color: white;
+      padding: 28px 5%;
+    }
+
+    header h1 { margin: 0 0 10px; }
+    header p { margin: 0; color: #dbeafe; }
+
+    main {
+      max-width: 1250px;
+      margin: 25px auto;
+      padding: 0 18px 40px;
+    }
+
+    .filters, .metrics, .layout {
+      display: grid;
+      gap: 15px;
+    }
+
+    .filters {
+      grid-template-columns: repeat(2, minmax(180px, 240px));
+      margin-bottom: 20px;
+    }
+
+    select {
+      padding: 11px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: white;
+      color: var(--ink);
+    }
+
+    .metrics {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background: var(--panel);
+      padding: 18px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      box-shadow: 0 4px 15px #17203308;
+      min-width: 0;
+    }
+
+    .metric-label { color: var(--muted); font-size: 14px; }
+    .metric-value { font-size: 28px; font-weight: bold; margin-top: 10px; }
+    .muted { color: var(--muted); font-size: 12px; }
+
+    .layout {
+      grid-template-columns: 1fr 1fr;
+      align-items: start;
+    }
+
+    h2 { font-size: 18px; margin: 0 0 12px; }
+
+    .intro {
+      color: var(--muted);
+      font-size: 13px;
+      margin: 0 0 14px;
+    }
+
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 11px 8px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 5px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+
+    .Operational, .Low {
+      background: #dcfce7;
+      color: var(--green);
+    }
+
+    .Maintenance, .High {
+      background: #fef3c7;
+      color: var(--amber);
+    }
+
+    .Offline, .Critical {
+      background: #fee2e2;
+      color: var(--red);
+    }
+
+    .Medium {
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+
+    .alert {
+      padding: 12px;
+      border-left: 4px solid #d97706;
+      background: #fffbeb;
+      margin-bottom: 10px;
+      border-radius: 5px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .alert.Critical {
+      border-color: #dc2626;
+      background: #fef2f2;
+    }
+
+    .alert.Low {
+      border-color: #16a34a;
+      background: #f0fdf4;
+    }
+
+    .alert strong { display: block; margin-bottom: 4px; }
+
+    footer {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 20px;
+    }
+
+    @media (max-width: 850px) {
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 450px) {
+      .metrics { gap: 8px; }
+      .card { padding: 12px; }
+      .metric-value { font-size: 22px; }
+    }
+  </style>
+</head>
+
+<body>
+<header>
+  <h1>Industrial Equipment Monitoring Dashboard</h1>
+  <p>Predictive maintenance alerts, machine health and downtime analytics</p>
+</header>
+
+<main>
+  <div class="filters">
+    <select id="statusFilter" aria-label="Filter by machine status">
+      <option value="All">All statuses</option>
+      <option value="Operational">Operational</option>
+      <option value="Maintenance">Maintenance</option>
+      <option value="Offline">Offline</option>
+    </select>
+
+    <select id="unitFilter" aria-label="Filter by production unit">
+      <option value="All">All units</option>
+      <option value="Assembly Line A">Assembly Line A</option>
+      <option value="Packaging">Packaging</option>
+      <option value="Utilities">Utilities</option>
+      <option value="Machining">Machining</option>
+    </select>
+  </div>
+
+  <section class="metrics">
+    <div class="card">
+      <div class="metric-label">Total machines</div>
+      <div class="metric-value" id="total">0</div>
+    </div>
+    <div class="card">
+      <div class="metric-label">Operational machines</div>
+      <div class="metric-value" id="operational">0</div>
+    </div>
+    <div class="card">
+      <div class="metric-label">Recent downtime</div>
+      <div class="metric-value" id="downtime">0 h</div>
+    </div>
+    <div class="card">
+      <div class="metric-label">Highest maintenance risk</div>
+      <div class="metric-value" id="highestRisk">0</div>
+      <div class="muted" id="riskMachine"></div>
+    </div>
+  </section>
+
+  <section class="layout">
+    <div class="card">
+      <h2>Equipment status</h2>
+      <p class="intro">
+        Temperature warning above 80°C; vibration warning above 7.0 mm/s.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Machine / unit</th>
+              <th>Run hours</th>
+              <th>Temp.</th>
+              <th>Vibration</th>
+              <th>Status</th>
+              <th>Risk</th>
+            </tr>
+          </thead>
+          <tbody id="equipmentRows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Predictive alerts</h2>
+      <p class="intro">Sensor thresholds, status and maintenance dates.</p>
+      <div id="alerts"></div>
+    </div>
+
+    <div class="card">
+      <h2>Maintenance priority</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Machine</th>
+              <th>Severity</th>
+              <th>Due date</th>
+              <th>Recommended action</th>
+            </tr>
+          </thead>
+          <tbody id="priorityRows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Downtime analytics</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Machine</th>
+              <th>Unit</th>
+              <th>Downtime</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="downtimeRows"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Demo dashboard using sample equipment data and rule-based risk scoring.
+    It is not connected to live industrial sensors.
+  </footer>
+</main>
+
+<script>
+const machines = [
+  {
+    id: "M-101", unit: "Assembly Line A", hours: 6240,
+    temp: 72.4, vibration: 3.2, status: "Operational",
+    due: "2026-11-02", downtime: 1.5
+  },
+  {
+    id: "M-102", unit: "Assembly Line A", hours: 8910,
+    temp: 86.7, vibration: 8.4, status: "Maintenance",
+    due: "2026-10-23", downtime: 8
+  },
+  {
+    id: "M-203", unit: "Packaging", hours: 5120,
+    temp: 68.9, vibration: 2.6, status: "Operational",
+    due: "2026-11-18", downtime: 0.5
+  },
+  {
+    id: "M-204", unit: "Packaging", hours: 10220,
+    temp: 83.1, vibration: 6.2, status: "Operational",
+    due: "2026-10-25", downtime: 5.5
+  },
+  {
+    id: "M-305", unit: "Utilities", hours: 11380,
+    temp: 78.5, vibration: 9.1, status: "Offline",
+    due: "2026-10-22", downtime: 16
+  },
+  {
+    id: "M-306", unit: "Utilities", hours: 4360,
+    temp: 61.2, vibration: 2.1, status: "Operational",
+    due: "2026-12-04", downtime: 0
+  },
+  {
+    id: "M-407", unit: "Machining", hours: 7680,
+    temp: 80.8, vibration: 7.6, status: "Maintenance",
+    due: "2026-10-24", downtime: 6
+  }
+];
+
+const TEMP_LIMIT = 80;
+const VIBRATION_LIMIT = 7.0;
+const $ = id => document.getElementById(id);
+
+function daysUntil(date) {
+  const target = new Date(date + "T00:00:00");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((target - today) / 86400000);
+}
+
+function formatDate(date) {
+  return new Date(date + "T00:00:00").toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric"
+  });
+}
+
+function assess(machine) {
+  let score = 0;
+  const days = daysUntil(machine.due);
+
+  if (machine.temp > TEMP_LIMIT) {
+    score += Math.min(30, 15 + (machine.temp - TEMP_LIMIT) * 1.5);
+  }
+
+  if (machine.vibration > VIBRATION_LIMIT) {
+    score += Math.min(30, 15 + (machine.vibration - VIBRATION_LIMIT) * 5);
+  }
+
+  if (machine.status === "Maintenance") score += 15;
+  if (machine.status === "Offline") score += 25;
+  if (days <= 3) score += 15;
+  else if (days <= 14) score += 8;
+
+  score = Math.min(100, Math.round(score));
+
+  const severity =
+    score >= 65 ? "Critical" :
+    score >= 40 ? "High" :
+    score >= 20 ? "Medium" : "Low";
+
+  let action = "Continue routine monitoring";
+
+  if (machine.status === "Offline") {
+    action = "Keep isolated; inspect before restarting";
+  } else if (machine.temp > TEMP_LIMIT && machine.vibration > VIBRATION_LIMIT) {
+    action = "Inspect bearings and cooling immediately";
+  } else if (machine.temp > TEMP_LIMIT) {
+    action = "Inspect cooling, lubrication and thermal load";
+  } else if (machine.vibration > VIBRATION_LIMIT) {
+    action = "Inspect alignment, bearings and mounting";
+  } else if (machine.status === "Maintenance" || days <= 3) {
+    action = "Complete planned maintenance and verify sensors";
+  }
+
+  return { ...machine, score, severity, action };
+}
+
+function badge(value) {
+  return `<span class="pill ${value}">${value}</span>`;
+}
+
+function render() {
+  const selectedStatus = $("statusFilter").value;
+  const selectedUnit = $("unitFilter").value;
+
+  const list = machines
+    .filter(machine =>
+      (selectedStatus === "All" || machine.status === selectedStatus) &&
+      (selectedUnit === "All" || machine.unit === selectedUnit)
+    )
+    .map(assess)
+    .sort((a, b) => b.score - a.score);
+
+  $("total").textContent = list.length;
+
+  $("operational").textContent =
+    list.filter(machine => machine.status === "Operational").length;
+
+  $("downtime").textContent =
+    list.reduce((sum, machine) => sum + machine.downtime, 0).toFixed(1) + " h";
+
+  $("highestRisk").textContent =
+    list.length ? list[0].score + "/100" : "—";
+
+  $("riskMachine").textContent = list.length
+    ? list[0].id + " · " + list[0].severity
+    : "No matching machines";
+
+  $("equipmentRows").innerHTML = list.map(machine => `
+    <tr>
+      <td>
+        <strong>${machine.id}</strong><br>
+        <span class="muted">${machine.unit}</span>
+      </td>
+      <td>${machine.hours.toLocaleString()} h</td>
+      <td>${machine.temp.toFixed(1)}°C ${machine.temp > TEMP_LIMIT ? "⚠" : ""}</td>
+      <td>${machine.vibration.toFixed(1)} mm/s ${machine.vibration > VIBRATION_LIMIT ? "⚠" : ""}</td>
+      <td>${badge(machine.status)}</td>
+      <td>${machine.score}/100</td>
+    </tr>
+  `).join("") || `<tr><td colspan="6">No matching machines.</td></tr>`;
+
+  const alertMachines = list.filter(machine =>
+    machine.temp > TEMP_LIMIT ||
+    machine.vibration > VIBRATION_LIMIT ||
+    machine.status !== "Operational" ||
+    daysUntil(machine.due) <= 3
+  ).slice(0, 5);
+
+  $("alerts").innerHTML = alertMachines.map(machine => {
+    const reasons = [];
+
+    if (machine.temp > TEMP_LIMIT) {
+      reasons.push(`temperature ${machine.temp.toFixed(1)}°C exceeds ${TEMP_LIMIT}°C`);
+    }
+
+    if (machine.vibration > VIBRATION_LIMIT) {
+      reasons.push(`vibration ${machine.vibration.toFixed(1)} mm/s exceeds ${VIBRATION_LIMIT} mm/s`);
+    }
+
+    if (machine.status !== "Operational") {
+      reasons.push(`status is ${machine.status}`);
+    }
+
+    if (daysUntil(machine.due) <= 3) {
+      reasons.push(`maintenance due ${formatDate(machine.due)}`);
+    }
+
+    return `
+      <div class="alert ${machine.severity}">
+        <strong>${machine.id} · ${machine.severity} risk</strong>
+        ${reasons.join("; ")}.
+        <br><small>${machine.action}.</small>
+      </div>
+    `;
+  }).join("") || `<div class="alert Low">No active alerts for this selection.</div>`;
+
+  $("priorityRows").innerHTML = list.slice(0, 5).map(machine => `
+    <tr>
+      <td><strong>${machine.id}</strong></td>
+      <td>${badge(machine.severity)}</td>
+      <td>${formatDate(machine.due)}</td>
+      <td>${machine.action}</td>
+    </tr>
+  `).join("") || `<tr><td colspan="4">No matching machines.</td></tr>`;
+
+  $("downtimeRows").innerHTML = [...list]
+    .sort((a, b) => b.downtime - a.downtime)
+    .map(machine => `
+      <tr>
+        <td>${machine.id}</td>
+        <td>${machine.unit}</td>
+        <td>${machine.downtime.toFixed(1)} h</td>
+        <td>${badge(machine.status)}</td>
+      </tr>
+    `).join("") || `<tr><td colspan="4">No matching machines.</td></tr>`;
+}
+
+$("statusFilter").addEventListener("change", render);
+$("unitFilter").addEventListener("change", render);
+render();
+</script>
+</body>
+</html>
