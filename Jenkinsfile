@@ -14,15 +14,17 @@ pipeline {
             defaultValue: true,
             description: 'Push the image to Docker Hub'
         )
+
         booleanParam(
             name: 'DEPLOY_TO_KUBERNETES',
             defaultValue: false,
             description: 'Deploy to Kubernetes using kubernetes-creds'
         )
+
         choice(
             name: 'RELEASE_MODE',
             choices: ['STABLE', 'FAULTY_ROLLBACK_TEST'],
-            description: 'Choose a normal deployment or test automatic rollback'
+            description: 'Choose normal deployment or automatic rollback test'
         )
     }
 
@@ -37,85 +39,77 @@ pipeline {
         stage('Validate source') {
             steps {
                 echo 'Checking project files...'
+
                 bat '''
-                    @echo off
-                    if not exist index.html (
-                        echo ERROR: index.html not found
-                        exit /b 1
-                    )
-                    if not exist Dockerfile (
-                        echo ERROR: Dockerfile not found
-                        exit /b 1
-                    )
-                    if not exist deployment.yaml (
-                        echo ERROR: deployment.yaml not found
-                        exit /b 1
-                    )
-                    if not exist Jenkinsfile (
-                        echo ERROR: Jenkinsfile not found
-                        exit /b 1
-                    )
-                    echo All required files are present.
-                '''
+@echo off
+if not exist index.html exit /b 1
+if not exist Dockerfile exit /b 1
+if not exist deployment.yaml exit /b 1
+if not exist Jenkinsfile exit /b 1
+echo All required files are present.
+'''
             }
         }
 
         stage('Check Docker') {
             steps {
                 bat '''
-                    @echo off
-                    docker --version
-                    if errorlevel 1 exit /b 1
-                    docker info
-                    if errorlevel 1 (
-                        echo ERROR: Jenkins cannot access Docker.
-                        exit /b 1
-                    )
-                '''
+@echo off
+docker --version
+if errorlevel 1 exit /b 1
+
+docker info
+if errorlevel 1 (
+    echo ERROR: Jenkins cannot access Docker.
+    exit /b 1
+)
+'''
             }
         }
 
         stage('Validate Kubernetes manifest') {
             steps {
                 bat '''
-                    @echo off
-                    findstr /I /C:"kind: Deployment" deployment.yaml
-                    if errorlevel 1 (
-                        echo ERROR: Deployment not found in deployment.yaml
-                        exit /b 1
-                    )
-                    findstr /I /C:"kind: Service" deployment.yaml
-                    if errorlevel 1 (
-                        echo ERROR: Service not found in deployment.yaml
-                        exit /b 1
-                    )
-                    echo Kubernetes manifest basic checks passed.
-                '''
+@echo off
+findstr /I /C:"kind: Deployment" deployment.yaml
+if errorlevel 1 exit /b 1
+
+findstr /I /C:"kind: Service" deployment.yaml
+if errorlevel 1 exit /b 1
+
+echo Kubernetes manifest basic checks passed.
+'''
             }
         }
 
         stage('Build Docker image') {
             steps {
                 bat '''
-                    @echo off
-                    docker build --pull ^
-                      -t "%DOCKERHUB_REPO%:%IMAGE_TAG%" ^
-                      -t "%DOCKERHUB_REPO%:latest" .
-                    if errorlevel 1 exit /b 1
-                    docker image inspect "%DOCKERHUB_REPO%:%IMAGE_TAG%"
-                    if errorlevel 1 exit /b 1
-                '''
+@echo off
+docker build --pull ^
+  -t "%DOCKERHUB_REPO%:%IMAGE_TAG%" ^
+  -t "%DOCKERHUB_REPO%:latest" .
+
+if errorlevel 1 exit /b 1
+
+docker image inspect "%DOCKERHUB_REPO%:%IMAGE_TAG%"
+if errorlevel 1 exit /b 1
+'''
             }
         }
 
         stage('Local HTTP smoke test') {
             steps {
                 bat '''
-                    @echo off
-                    docker rm -f "%SMOKE_CONTAINER%" 2>NUL
-                    docker run -d --name "%SMOKE_CONTAINER%" -p 127.0.0.1:18080:80 "%DOCKERHUB_REPO%:%IMAGE_TAG%"
-                    if errorlevel 1 exit /b 1
-                '''
+@echo off
+docker rm -f "%SMOKE_CONTAINER%" 2>NUL
+
+docker run -d --name "%SMOKE_CONTAINER%" ^
+  -p 127.0.0.1:18080:80 ^
+  "%DOCKERHUB_REPO%:%IMAGE_TAG%"
+
+if errorlevel 1 exit /b 1
+'''
 
                 powershell(
                     label: 'Wait for dashboard HTTP response',
@@ -148,13 +142,14 @@ pipeline {
                     '''
                 )
             }
+
             post {
                 always {
                     bat '''
-                        @echo off
-                        docker rm -f "%SMOKE_CONTAINER%" 2>NUL
-                        exit /b 0
-                    '''
+@echo off
+docker rm -f "%SMOKE_CONTAINER%" 2>NUL
+exit /b 0
+'''
                 }
             }
         }
@@ -172,6 +167,7 @@ pipeline {
             when {
                 expression { params.PUSH_TO_DOCKERHUB }
             }
+
             steps {
                 withCredentials([
                     usernamePassword(
@@ -181,18 +177,25 @@ pipeline {
                     )
                 ]) {
                     bat '''
-                        @echo off
-                        powershell -NoProfile -ExecutionPolicy Bypass -Command "$env:DOCKERHUB_TOKEN | docker login --username $env:DOCKERHUB_USER --password-stdin"
-                        if errorlevel 1 exit /b 1
+@echo off
 
-                        docker push "%DOCKERHUB_REPO%:%IMAGE_TAG%"
-                        if errorlevel 1 exit /b 1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$env:DOCKERHUB_TOKEN | docker login --username $env:DOCKERHUB_USER --password-stdin"
+if errorlevel 1 exit /b 1
 
-                        docker push "%DOCKERHUB_REPO%:latest"
-                        if errorlevel 1 exit /b 1
+docker push "%DOCKERHUB_REPO%:%IMAGE_TAG%"
+if errorlevel 1 (
+    docker logout
+    exit /b 1
+)
 
-                        docker logout
-                    '''
+docker push "%DOCKERHUB_REPO%:latest"
+if errorlevel 1 (
+    docker logout
+    exit /b 1
+)
+
+docker logout
+'''
                 }
             }
         }
@@ -204,8 +207,16 @@ pipeline {
                     expression { params.RELEASE_MODE == 'STABLE' }
                 }
             }
+
             steps {
                 script {
+                    if (!params.PUSH_TO_DOCKERHUB) {
+                        error(
+                            'Stable Kubernetes deployment requires ' +
+                            'PUSH_TO_DOCKERHUB=true for this pipeline.'
+                        )
+                    }
+
                     withCredentials([
                         file(
                             credentialsId: 'kubernetes-creds',
@@ -213,24 +224,26 @@ pipeline {
                         )
                     ]) {
                         bat '''
-                            @echo off
-                            set "KUBECONFIG=%KUBECONFIG_FILE%"
+@echo off
+set "KUBECONFIG=%KUBECONFIG_FILE%"
 
-                            kubectl config current-context
-                            if errorlevel 1 exit /b 1
+kubectl config current-context
+if errorlevel 1 exit /b 1
 
-                            powershell -NoProfile -ExecutionPolicy Bypass -Command "$p = 'deployment.yaml'; $s = [IO.File]::ReadAllText($p); $s = $s.Replace('YOUR_DOCKERHUB_USERNAME/industrial-maintenance-dashboard:latest', ($env:DOCKERHUB_REPO + ':' + $env:IMAGE_TAG)); [IO.File]::WriteAllText($p, $s)"
-                            if errorlevel 1 exit /b 1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$p = 'deployment.yaml'; $s = [IO.File]::ReadAllText($p); $placeholder = 'YOUR_DOCKERHUB_USERNAME/industrial-maintenance-dashboard:latest'; if (-not $s.Contains($placeholder)) { throw 'Expected image placeholder not found in deployment.yaml.' }; $s = $s.Replace($placeholder, ($env:DOCKERHUB_REPO + ':' + $env:IMAGE_TAG)); [IO.File]::WriteAllText($p, $s)"
+if errorlevel 1 exit /b 1
 
-                            kubectl apply -f deployment.yaml
-                            if errorlevel 1 exit /b 1
+kubectl apply -f deployment.yaml
+if errorlevel 1 exit /b 1
 
-                            kubectl rollout status deployment/%DEPLOYMENT_NAME% --timeout=180s
-                            if errorlevel 1 exit /b 1
+kubectl rollout status deployment/%DEPLOYMENT_NAME% --timeout=180s
+if errorlevel 1 exit /b 1
 
-                            kubectl get deployment %DEPLOYMENT_NAME%
-                            kubectl get service
-                        '''
+kubectl get deployment %DEPLOYMENT_NAME%
+if errorlevel 1 exit /b 1
+
+kubectl get service
+'''
                     }
                 }
             }
@@ -240,9 +253,12 @@ pipeline {
             when {
                 allOf {
                     expression { params.DEPLOY_TO_KUBERNETES }
-                    expression { params.RELEASE_MODE == 'FAULTY_ROLLBACK_TEST' }
+                    expression {
+                        params.RELEASE_MODE == 'FAULTY_ROLLBACK_TEST'
+                    }
                 }
             }
+
             steps {
                 script {
                     withCredentials([
@@ -252,38 +268,73 @@ pipeline {
                         )
                     ]) {
                         bat '''
-                            @echo off
-                            set "KUBECONFIG=%KUBECONFIG_FILE%"
+@echo off
+set "KUBECONFIG=%KUBECONFIG_FILE%"
 
-                            powershell -NoProfile -ExecutionPolicy Bypass -Command "$p = 'deployment.yaml'; $s = [IO.File]::ReadAllText($p); $s = $s.Replace('YOUR_DOCKERHUB_USERNAME/industrial-maintenance-dashboard:latest', ($env:DOCKERHUB_REPO + ':' + $env:IMAGE_TAG)); [IO.File]::WriteAllText($p, $s)"
-                            if errorlevel 1 exit /b 1
+echo ==========================================
+echo STEP 1: Verify current healthy deployment
+echo ==========================================
 
-                            kubectl apply -f deployment.yaml
-                            if errorlevel 1 exit /b 1
+kubectl rollout status deployment/%DEPLOYMENT_NAME% --timeout=120s
+if errorlevel 1 exit /b 1
 
-                            kubectl rollout status deployment/%DEPLOYMENT_NAME% --timeout=180s
-                            if errorlevel 1 exit /b 1
+echo ==========================================
+echo STEP 2: Save the current revision
+echo ==========================================
 
-                            echo Injecting a deliberately invalid image to test rollback.
-                            kubectl set image deployment/%DEPLOYMENT_NAME% *=invalid-image-for-rollback-test:does-not-exist
-                            if errorlevel 1 exit /b 1
+kubectl rollout history deployment/%DEPLOYMENT_NAME%
+if errorlevel 1 exit /b 1
 
-                            kubectl rollout status deployment/%DEPLOYMENT_NAME% --timeout=60s
-                            if not errorlevel 1 (
-                                echo WARNING: Faulty rollout unexpectedly succeeded.
-                                exit /b 1
-                            )
+echo ==========================================
+echo STEP 3: Inject a deliberately invalid image
+echo ==========================================
 
-                            echo Fault detected. Rolling back to the previous release.
-                            kubectl rollout undo deployment/%DEPLOYMENT_NAME%
-                            if errorlevel 1 exit /b 1
+kubectl set image deployment/%DEPLOYMENT_NAME% *=invalid-image-for-rollback-test:does-not-exist
+if errorlevel 1 exit /b 1
 
-                            kubectl rollout status deployment/%DEPLOYMENT_NAME% --timeout=180s
-                            if errorlevel 1 exit /b 1
+echo ==========================================
+echo STEP 4: Wait for faulty rollout to fail
+echo ==========================================
 
-                            echo Rollback completed successfully.
-                            kubectl get deployment %DEPLOYMENT_NAME%
-                        '''
+kubectl rollout status deployment/%DEPLOYMENT_NAME% --timeout=60s
+
+if not errorlevel 1 (
+    echo ERROR: Faulty rollout unexpectedly succeeded.
+    echo Restoring previous revision before failing test.
+
+    kubectl rollout undo deployment/%DEPLOYMENT_NAME%
+    if errorlevel 1 exit /b 1
+
+    kubectl rollout status deployment/%DEPLOYMENT_NAME% --timeout=180s
+    if errorlevel 1 exit /b 1
+
+    exit /b 1
+)
+
+echo Expected rollout failure detected.
+
+echo ==========================================
+echo STEP 5: Restore previous working revision
+echo ==========================================
+
+kubectl rollout undo deployment/%DEPLOYMENT_NAME%
+if errorlevel 1 exit /b 1
+
+echo ==========================================
+echo STEP 6: Verify deployment recovery
+echo ==========================================
+
+kubectl rollout status deployment/%DEPLOYMENT_NAME% --timeout=180s
+if errorlevel 1 exit /b 1
+
+kubectl get deployment %DEPLOYMENT_NAME% -o wide
+if errorlevel 1 exit /b 1
+
+echo ==========================================
+echo SUCCESS: Rollback test completed.
+echo Previous working deployment restored.
+echo ==========================================
+'''
                     }
                 }
             }
@@ -293,11 +344,13 @@ pipeline {
     post {
         success {
             echo 'Pipeline completed successfully.'
-            echo 'Dashboard image: Docker Hub repository and build-number tag.'
+            echo 'Review the console output for the completed stages.'
         }
+
         failure {
             echo 'Pipeline failed. Review the first failing stage in Console Output.'
         }
+
         always {
             echo 'Pipeline execution finished.'
         }
